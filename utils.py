@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 from sklearn.metrics import accuracy_score, precision_score, recall_score
+import os
 
 
 def calc_multi_cls_measures(probs, label):
@@ -99,3 +100,8 @@ def print_epoch_progress(train_loss, val_loss, time_duration, train_metric,
     log_str += templ.format(*(val_recalls[1:].tolist()))
     log_str += 'T(s) {:.2f}'.format(time_duration)
     print(log_str)
+    
+def make_dirs(*dir_paths):
+    for path in dir_paths:
+        if not os.path.exists(path):
+                os.makedirs(path)

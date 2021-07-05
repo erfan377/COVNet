@@ -341,7 +341,7 @@ def save_update_torch(df, file, save_dir, column, instance_id):
     df.at[idx, column] = os.path.join(save_dir, name)
     torch.save(file, os.path.join(save_dir, name))
     
-def covnet_process(imgs, labels):
+def covnet_process(imgs, labels, rescaleSlope, rescaleIntercept):
     data_mip = []
     label_mip = []
     for i in range(0, len(imgs), MIP_STEP):
@@ -355,6 +355,9 @@ def covnet_process(imgs, labels):
         label = torch.max(labels_sub, dim=0).values
         img = TF.resize(img, size=(224,224))
         label = TF.resize(label, size=(224,224))
+        img = torch.clip(img * rescaleSlope + rescaleIntercept, (-600 - 750), (-600 + 750))
+        img = (img - torch.min(img)) / (torch.max(img) - torch.min(img))
+        img = torch.nan_to_num(img, nan=0.0)
         data_mip.append(img)
         label_mip.append(label)
         
@@ -391,6 +394,8 @@ def midrc_parse(df, labels, output_dir, volume=True):
             data_list = []
             label_list = []
             first_instance_id = df_instance.loc[0, 'sop_instance_uid']
+            rescaleSlope = df_instance.loc[0, 'rescale_slope']
+            rescaleIntercept = df_instance.loc[0, 'rescale_intercept']
             # Process the SOP Instances from the lung volume
             for idx in range(len(df_instance)):
                 instance_path = df_instance.loc[idx, 'path']
@@ -409,7 +414,7 @@ def midrc_parse(df, labels, output_dir, volume=True):
                     label = process_label(labels[instance_id], img.shape[1:])
                 label_list.append(label)
 
-            img, label = covnet_process(data_list, label_list)
+            img, label = covnet_process(data_list, label_list, rescaleSlope, rescaleIntercept)
             save_update_torch(df, img, dicom_dir, 'path', first_instance_id)
             save_update_torch(df, label, label_dir, 'label_path', first_instance_id)
 
@@ -452,7 +457,6 @@ def cli_main():
 
         df = build_dicom_df(args.data_dir)
         df, labels = process_jsons(df, args.data_dir)
-        import pdb; pdb.set_trace()
         df = midrc_parse(df, labels, args.output_dir, args.volume)
         df = df[df['label_path'] != '']
         # save CSV
