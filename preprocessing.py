@@ -26,7 +26,6 @@ import pytorch_lightning as pl
 from constants import *
 from utils import make_dirs
 
-MIP_STEP = 5
 def build_dicom_df(data_dir):
     """ Extracts dicoms data and saves to df
 
@@ -65,8 +64,7 @@ def build_dicom_df(data_dir):
                     'pixel_spacing_y': ds.PixelSpacing[0],
                     'pixel_spacing_x': ds.PixelSpacing[1],
                     'sop_class_uid': ds.SOPClassUID,
-                    'sop_instance_uid': ds.SOPInstanceUID,
-                    'mask_non_empty': 0
+                    'sop_instance_uid': ds.SOPInstanceUID
                 })
 
     df = pd.DataFrame(df)
@@ -107,7 +105,6 @@ def process_jsons(df, data_dir):
     label_dict = defaultdict(list)
     df['label_count'] = 0
     df['label_path'] = ''
-    df['label_details'] = np.empty((len(df), 0)).tolist()
 
     for root, dirs, files in os.walk(data_dir):
         for f in files:
@@ -128,7 +125,6 @@ def process_jsons(df, data_dir):
     for instance_id, data in label_dict.items():
         idx = df[df['sop_instance_uid'] == instance_id].index.item()
         df.at[idx, 'label_count'] = len(data)
-        df.at[idx, 'label_details'] = data
     
     return df, label_dict
 
@@ -365,7 +361,7 @@ def covnet_process(imgs, labels, rescaleSlope, rescaleIntercept):
         
 
 
-def midrc_parse(df, labels, output_dir, volume=True):
+def midrc_parse(df, labels, output_dir):
     """ Processes midrc dicoms and labels
     Keyword arguments:
       df -- processed dataframe of dicoms
@@ -383,7 +379,7 @@ def midrc_parse(df, labels, output_dir, volume=True):
         series_uid = row['series_instance_uid']
 
         # apply lung segmentation as a volume
-        if volume and series_uid not in unique_set:
+        if series_uid not in unique_set:
             
             # generate the lung mask and blend the img with the mask
             output_mask_path = os.path.join(temp_dir, series_uid + '.dcm')
@@ -397,15 +393,13 @@ def midrc_parse(df, labels, output_dir, volume=True):
             rescaleSlope = df_instance.loc[0, 'rescale_slope']
             rescaleIntercept = df_instance.loc[0, 'rescale_intercept']
             # Process the SOP Instances from the lung volume
+
             for idx in range(len(df_instance)):
                 instance_path = df_instance.loc[idx, 'path']
                 instance_id = df_instance.loc[idx, 'sop_instance_uid']
                 img = load_img(instance_path)
                 
                 img = preprocess_mask(img, masks[idx])
-                if img.max() > 0:  # Determines which files have empty lung
-                    df.at[df['sop_instance_uid'] ==
-                          instance_id, 'mask_non_empty'] = 1
                 data_list.append(img)
 
                 # Check if there's a label for instance
@@ -413,7 +407,8 @@ def midrc_parse(df, labels, output_dir, volume=True):
                 if instance_id in labels:
                     label = process_label(labels[instance_id], img.shape[1:])
                 label_list.append(label)
-
+            num_covid = df_instance['label_count'].sum()
+            df.at[df['sop_instance_uid'] == first_instance_id, 'label_count'] = num_covid
             img, label = covnet_process(data_list, label_list, rescaleSlope, rescaleIntercept)
             save_update_torch(df, img, dicom_dir, 'path', first_instance_id)
             save_update_torch(df, label, label_dir, 'label_path', first_instance_id)
@@ -429,7 +424,6 @@ def cli_main():
     parser = ArgumentParser()
     parser.add_argument('--ricord', action='store_true', default=False)
     parser.add_argument('--midrc', action='store_true', default=False)
-    parser.add_argument('--volume', action='store_true', default=False)
     parser.add_argument('--data_dir', type=str, default='.',
                         help='Path to input files')
     parser.add_argument('--output_dir', type=str, default='./output')
@@ -457,8 +451,8 @@ def cli_main():
 
         df = build_dicom_df(args.data_dir)
         df, labels = process_jsons(df, args.data_dir)
-        df = midrc_parse(df, labels, args.output_dir, args.volume)
-        df = df[df['label_path'] != '']
+        df = midrc_parse(df, labels, args.output_dir)
+        df = df[df['label_path'] != ''].reset_index()
         # save CSV
         df.to_csv(os.path.join(args.output_dir, 
                                           'metadata.csv'), index=True)

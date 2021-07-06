@@ -27,13 +27,12 @@ def train_model(model, train_loader, epoch, num_epochs, optimizer, writer,
     y_probs = np.zeros((0, n_classes), np.float)
     losses, y_trues = [], []
     model.train()
-
+    
     for m in model.modules():
         if isinstance(m, nn.BatchNorm2d):
             m.train()
             m.weight.requires_grad = False
             m.bias.requires_grad = False
-
     for i, (image, label, case_id) in enumerate(train_loader):
         optimizer.zero_grad()
         if torch.cuda.is_available():
@@ -77,9 +76,7 @@ def evaluate_model(model, val_loader, epoch, num_epochs, writer, current_lr,
 
     y_probs = np.zeros((0, n_classes), np.float)
     losses, y_trues = [], []
-
     for i, (image, label, case_id) in enumerate(val_loader):
-
         if torch.cuda.is_available():
             image = image.cuda()
             label = label.cuda()
@@ -122,24 +119,17 @@ def main(args):
     log_dir = os.path.join(exp_dir, 'logs')
     model_dir = os.path.join(exp_dir, 'models')
     os.makedirs(model_dir, exist_ok=True)
-
     ##########################################################################
     #  Define all the necessary variables for model training and evaluation  #
     ##########################################################################
     writer = SummaryWriter(log_dir)
-    train_dataset = dataset.NCovDataset('data/', stage='train')
-    weights = train_dataset.make_weights_for_balanced_classes()
-    weights = torch.DoubleTensor(weights)
-    sampler = torch.utils.data.sampler.WeightedRandomSampler(
-        weights, len(train_dataset.case_ids))
-
+    train_dataset = dataset.MIDRCDataset(args.data_dir, stage='train')
     train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=1, num_workers=20,
-        drop_last=False, sampler=sampler)
-
-    val_dataset = dataset.NCovDataset('data/', stage='val')
+        train_dataset, batch_size=1, num_workers=1,
+        drop_last=False)
+    val_dataset = dataset.MIDRCDataset(args.data_dir, stage='val')
     val_loader = torch.utils.data.DataLoader(
-        val_dataset, batch_size=1, shuffle=False, num_workers=11,
+        val_dataset, batch_size=1, shuffle=False, num_workers=1,
         drop_last=False)
 
     cov_net = model.COVNet(n_classes=args.n_classes)

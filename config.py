@@ -22,6 +22,7 @@ def parse_arguments():
     parser.add_argument('--patience', type=int, default=9)
     parser.add_argument('--log-every', type=int, default=100)
     parser.add_argument('--save-model', type=bool, default=True)
+    parser.add_argument('--data_dir', type=str, default='./data')
     args = parser.parse_args()
 
     return args
