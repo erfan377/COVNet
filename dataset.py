@@ -92,7 +92,7 @@ class MIDRCDataset(data.Dataset):
         # normalize image to range [0, 1], then apply this transform
         patch_size = np.asarray(array.shape)[1:]
         augmented = noise_transforms.augment_gaussian_noise(
-            array, noise_variance=(0, .015))
+            array.numpy(), noise_variance=(0, .015))
 
         # need to become [bs, c, x, y, z] before augment_spatial
         augmented = augmented[None, ...]
